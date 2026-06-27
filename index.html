@@ -669,7 +669,6 @@ titles:[
 {id:4,icon:'📐',color:'blue',text:'BIM Coordinator · Clash Detection Expert'}
 ],
 desc:'Delivering precision <strong>MEP BIM models</strong>, detailed HVAC ducting & piping layouts for international projects. Based in Pakistan — open to <span class="hl">UAE · KSA · Qatar</span>.',
-phrases:['MEP Revit Modeler & Detailer','HVAC Ducting Specialist','BIM Coordination Expert','Clash Detection Engineer'],
 keywords:[{text:'Revit MEP',type:'bim'},{text:'Navisworks',type:'bim'},{text:'HVAC Ducting',type:'hvac'},{text:'Piping Systems',type:'hvac'},{text:'BIM Coordination',type:'bim'},{text:'Clash Detection',type:'hvac'},{text:'Shop Drawings',type:'bim'},{text:'LOD 300–450',type:'bim'},{text:'SolidWorks',type:'sw'},{text:'ANSYS',type:'sim'},{text:'ABAQUS',type:'sim'},{text:'COMSOL',type:'sim'},{text:'ISO 19650',type:'std'},{text:'AutoCAD',type:'hvac'}]
 },
 about:{eyebrow:'Who I Am',title:'About <em>Umair Ahmad</em>',desc:'A detail-driven Mechanical BIM Engineer with real international project experience.',
@@ -904,9 +903,9 @@ function toggleMobile(){$('mobileMenu').classList.toggle('open');$('burger').cla
 function closeMobile(){$('mobileMenu').classList.remove('open');$('burger').classList.remove('open')}
 function attachReveal(){const o=new IntersectionObserver(e=>e.forEach(en=>{if(en.isIntersecting)en.target.classList.add('visible')}),{threshold:.08});document.querySelectorAll('.reveal,.reveal-right').forEach(el=>o.observe(el))}
 
+const phrases=['MEP Revit Modeler & Detailer','HVAC Ducting Specialist','BIM Coordination Expert','Clash Detection Engineer'];
 let pi=0,ci=0,del=false;
-function getPhrases(){const a=(data.hero&&Array.isArray(data.hero.phrases))?data.hero.phrases.filter(x=>x&&x.trim()):[];return a.length?a:['Mechanical BIM Engineer']}
-function typeLoop(){const e=$('typedText');if(!e)return;const phrases=getPhrases();if(pi>=phrases.length)pi=0;const p=phrases[pi];if(!del){e.textContent=p.slice(0,++ci);if(ci===p.length){del=true;setTimeout(typeLoop,1800);return}setTimeout(typeLoop,55)}else{e.textContent=p.slice(0,--ci);if(ci===0){del=false;pi=(pi+1)%phrases.length;setTimeout(typeLoop,300);return}setTimeout(typeLoop,30)}}
+function typeLoop(){const e=$('typedText');if(!e)return;const p=phrases[pi];if(!del){e.textContent=p.slice(0,++ci);if(ci===p.length){del=true;setTimeout(typeLoop,1800);return}setTimeout(typeLoop,55)}else{e.textContent=p.slice(0,--ci);if(ci===0){del=false;pi=(pi+1)%phrases.length;setTimeout(typeLoop,300);return}setTimeout(typeLoop,30)}}
 
 function showTab(key,btn){document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('on'));document.querySelectorAll('.ptab').forEach(b=>b.classList.remove('on'));const pane=document.getElementById('tp-'+key);if(pane)pane.classList.add('on');if(btn)btn.classList.add('on')}
 
@@ -1008,7 +1007,7 @@ if(target&&target.files){target.files.splice(idx,1);renderAll();savePortfolio(tr
 }
 
 function adminUploadProfile(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Compressing...','info');const result=await compressImage(f);data.profilePic=result.data;renderProfile();savePortfolio(true);showToast('✅ Profile updated!','success');this.value=''};i.click()}
-function adminUploadLogo(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Compressing...','info');const result=await compressImage(f);data.logoPic=result.data;renderLogo();savePortfolio(true);showToast('�� Logo updated!','success');this.value=''};i.click()}
+function adminUploadLogo(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Compressing...','info');const result=await compressImage(f);data.logoPic=result.data;renderLogo();savePortfolio(true);showToast('✅ Logo updated!','success');this.value=''};i.click()}
 function renderProfile(){if(data.profilePic){$('profileImg').src=data.profilePic;$('profileImg').style.display='block';$('profileInitial').style.display='none'}else{$('profileImg').style.display='none';$('profileInitial').style.display='block'}}
 function renderLogo(){if(data.logoPic){$('logoImg').src=data.logoPic;$('logoImg').style.display='block';$('logoText').style.display='none'}else{$('logoImg').style.display='none';$('logoText').style.display='block'}}
 
@@ -1045,7 +1044,7 @@ $('heroStats').innerHTML=statsHtml;
 
 function scrollAndTab(key){document.querySelector('#projects').scrollIntoView({behavior:'smooth'});setTimeout(()=>{const tab=document.querySelector(`.ptab[data-key="${key}"]`);if(tab)tab.click()},700)}
 
-function editHero(){openEditModal('Edit Hero Section','Update main introduction',[{type:'text',key:'eyebrowName',label:'Name',value:data.hero.eyebrowName,required:true},{type:'row',fields:[{type:'text',key:'line1',label:'Line 1',value:data.hero.line1},{type:'text',key:'line2',label:'Accent',value:data.hero.line2},{type:'text',key:'line3',label:'Line 3',value:data.hero.line3}]},{type:'textarea',key:'phrasesText',label:'Animated Typing Lines',value:(data.hero.phrases||[]).join('\n'),rows:5,hint:'One line per row — add, edit or remove to change the rotating typed text under the title'},{type:'textarea',key:'desc',label:'Description',value:data.hero.desc,rows:5,hint:'HTML allowed'}],v=>{data.hero.eyebrowName=v.eyebrowName;data.hero.line1=v.line1;data.hero.line2=v.line2;data.hero.line3=v.line3;data.hero.desc=v.desc;data.hero.phrases=(v.phrasesText||'').split('\n').map(s=>s.trim()).filter(Boolean);pi=0;ci=0;del=false;renderHero()},true)}
+function editHero(){openEditModal('Edit Hero Section','Update main introduction',[{type:'text',key:'eyebrowName',label:'Name',value:data.hero.eyebrowName,required:true},{type:'row',fields:[{type:'text',key:'line1',label:'Line 1',value:data.hero.line1},{type:'text',key:'line2',label:'Accent',value:data.hero.line2},{type:'text',key:'line3',label:'Line 3',value:data.hero.line3}]},{type:'textarea',key:'desc',label:'Description',value:data.hero.desc,rows:5,hint:'HTML allowed'}],v=>{data.hero.eyebrowName=v.eyebrowName;data.hero.line1=v.line1;data.hero.line2=v.line2;data.hero.line3=v.line3;data.hero.desc=v.desc;renderHero()},true)}
 
 // ════════ HERO TITLE add/edit/remove ════════
 function addHeroTitle(){
