@@ -475,9 +475,7 @@ section{padding:68px 22px}.hero{padding:120px 22px 70px}.hero-inner{grid-templat
 <div class="admin-bar" id="adminBar">
 <div class="ab-left"><div class="ab-dot"></div><span>ADMIN MODE ACTIVE</span></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="ab-btn ab-btn-green" onclick="generateProductionHTML()" title="Download a ready-to-deploy index.html with your data baked in">🚀 Generate Production HTML</button>
-<button class="ab-btn ab-btn-blue" onclick="exportPortfolio()" title="Backup data to file">⬇ Export Backup</button>
-<button class="ab-btn ab-btn-blue" onclick="importPortfolio()" title="Restore from backup">⬆ Import</button>
+<button class="ab-btn ab-btn-green" onclick="generateProductionHTML()" title="Generate an updated index.html with all your latest data baked in, then download it automatically">⬇ Download Updated HTML</button>
 <button class="ab-btn ab-btn-red" onclick="lockAdmin()">🔒 Exit Admin</button>
 </div>
 </div>
@@ -648,7 +646,6 @@ section{padding:68px 22px}.hero{padding:120px 22px 70px}.hero-inner{grid-templat
 
 <input type="file" id="hiddenFileInput" style="display:none" accept="image/*">
 <input type="file" id="hiddenMultiFileInput" style="display:none" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" multiple>
-<input type="file" id="hiddenImportInput" style="display:none" accept=".json">
 
 <script>
 'use strict';
@@ -795,7 +792,7 @@ showToast(`✅ Saved! (Storage: ${fmtSize(used)} / ~5 MB)`,'success');
 }
 return true;
 }catch(e){
-showToast('⚠️ Storage full! Use ⬇ Export Backup to save data, then remove some files to free space.','error');
+showToast('⚠️ Storage full! Use ⬇ Download Updated HTML to save your data to a file, then remove some files to free space.','error');
 return false;
 }
 }
@@ -808,44 +805,6 @@ if(s){const p=JSON.parse(s);data={...data,...p};return}
 // 2) Otherwise, use data baked into a Production HTML build (what public visitors see).
 if(window.__PORTFOLIO_DATA__){data={...data,...window.__PORTFOLIO_DATA__}}
 }catch{}
-}
-
-// ════════ EXPORT / IMPORT BACKUP ════════
-function exportPortfolio(){
-try{
-const json=JSON.stringify(data,null,2);
-const blob=new Blob([json],{type:'application/json'});
-const url=URL.createObjectURL(blob);
-const a=document.createElement('a');
-a.href=url;
-a.download=`umair-portfolio-${new Date().toISOString().slice(0,10)}.json`;
-document.body.appendChild(a);a.click();a.remove();
-URL.revokeObjectURL(url);
-showToast('✅ Backup downloaded! Keep it safe.','success');
-}catch(e){showToast('⚠️ Export failed','error')}
-}
-
-function importPortfolio(){
-const inp=$('hiddenImportInput');
-inp.onchange=function(){
-const f=this.files[0];if(!f)return;
-const r=new FileReader();
-r.onload=e=>{
-try{
-const imported=JSON.parse(e.target.result);
-if(!imported.hero||!imported.about){showToast('⚠️ Invalid backup file','error');return}
-if(confirm('Restore from this backup? Current data will be replaced.')){
-data=imported;
-savePortfolio(true);
-renderAll();
-showToast('✅ Backup restored successfully!','success');
-}
-}catch{showToast('⚠️ Invalid JSON file','error')}
-};
-r.readAsText(f);
-this.value='';
-};
-inp.click();
 }
 
 // ════════ GENERATE PRODUCTION HTML (one-click deploy file) ════════
