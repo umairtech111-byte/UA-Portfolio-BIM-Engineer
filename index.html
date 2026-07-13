@@ -16,12 +16,12 @@
 <div id="progressBar"></div>
 <div class="toast" id="toast"></div>
 <button class="admin-toggle" id="adminToggle" onclick="toggleAdmin()" title="Admin Mode">🔒</button>
-<button class="save-portfolio-btn" id="saveBtn" onclick="savePortfolio()">💾 Save Portfolio</button>
+<button class="save-portfolio-btn" id="saveBtn" onclick="savePortfolio()">☁️ Publish Live</button>
 
 <div class="admin-bar" id="adminBar">
 <div class="ab-left"><div class="ab-dot"></div><span>ADMIN MODE ACTIVE</span></div>
 <div style="display:flex;gap:8px;flex-wrap:wrap">
-<button class="ab-btn ab-btn-green" onclick="generateProductionHTML()" title="Generate an updated index.html with all your latest data baked in, then download it automatically">⬇ Export for Vercel</button>
+<button class="ab-btn ab-btn-green" onclick="savePortfolio()" title="Publish the current portfolio so every visitor sees it">☁️ Publish Live</button>
 <button class="ab-btn ab-btn-red" onclick="lockAdmin()">🔒 Exit Admin</button>
 </div>
 </div>
@@ -193,6 +193,7 @@
 <input type="file" id="hiddenFileInput" style="display:none" accept="image/*">
 <input type="file" id="hiddenMultiFileInput" style="display:none" multiple>
 
+<script src="/assets/js/blob-client.js" defer></script>
 <script src="/assets/js/app.js" defer></script>
 </body>
 </html>

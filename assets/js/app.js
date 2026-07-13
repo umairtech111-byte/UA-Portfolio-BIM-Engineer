@@ -1,8 +1,8 @@
-const ADMIN_PASSWORD='UmairBIM@2026',STORE='umair_portfolio_v6';
+const STORE='umair_portfolio_v6';
 const DB_NAME='umair_portfolio',DB_STORE='portfolio',DB_VERSION=1;
 const MAX_IMG_DIM=1200;          // resize images larger than this
 const IMG_QUALITY=0.78;          // JPEG quality for compression
-const MAX_FILE_SIZE=50*1024*1024; // keep exported static assets within a practical size
+const MAX_FILE_SIZE=100*1024*1024;
 
 let isAdmin=false,editContext=null,pendingFiles=[];
 
@@ -97,31 +97,64 @@ reader.readAsDataURL(file);
 });
 }
 
-function readFileRaw(file){
-return new Promise((resolve,reject)=>{
-const r=new FileReader();
-r.onload=e=>resolve({data:e.target.result,size:file.size});
-r.onerror=reject;
-r.readAsDataURL(file);
-});
-}
-
 async function processFile(file){
 try{
-let result;
-if(file.type.startsWith('image/')&&!file.type.includes('svg')){
-result=await compressImage(file);
-}else{
+if(!isAdmin){showToast('⚠️ Enter admin mode before uploading.','error');return null}
 if(file.size>MAX_FILE_SIZE){
 showToast(`⚠️ "${file.name}" too large (${fmtSize(file.size)}). Max ${fmtSize(MAX_FILE_SIZE)}.`,'error');
 return null;
 }
-result=await readFileRaw(file);
+let uploadable=file;
+if(file.type.startsWith('image/')&&!file.type.includes('svg')){
+const compressed=await compressImage(file);
+const imageBlob=await fetch(compressed.data).then(response=>response.blob());
+const imageName=file.name.replace(/\.[^.]+$/,'.jpg');
+uploadable=new File([imageBlob],imageName,{type:'image/jpeg'});
 }
-return{name:file.name,type:file.type,data:result.data,size:result.size,origSize:file.size};
+
+const cloudFile=await uploadFileToCloud(uploadable);
+return{name:file.name,type:uploadable.type||file.type,data:cloudFile.url,size:uploadable.size,origSize:file.size,pathname:cloudFile.pathname};
 }catch(e){
-showToast('⚠️ Failed to process '+file.name,'error');
+console.error('File upload failed:',e);
+showToast(`⚠️ Failed to upload ${file.name}. ${e.message||''}`,'error');
 return null;
+}
+}
+
+async function uploadFileToCloud(file){
+if(typeof window.vercelBlobUpload!=='function')throw new Error('Cloud upload client is unavailable');
+const safeName=(file.name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-');
+return window.vercelBlobUpload(`portfolio/uploads/${Date.now()}-${safeName}`,file,{
+access:'public',
+handleUploadUrl:'/api/upload',
+multipart:file.size>50*1024*1024,
+});
+}
+
+async function migrateEmbeddedFiles(){
+const embedded=[];
+const visit=value=>{
+if(Array.isArray(value)){value.forEach(visit);return}
+if(!value||typeof value!=='object')return;
+if(typeof value.data==='string'&&value.data.startsWith('data:')&&value.name){embedded.push(value);return}
+Object.values(value).forEach(visit);
+};
+visit(data);
+
+for(const file of embedded){
+showToast(`⏳ Moving ${file.name} to cloud storage...`,'info');
+const blob=await fetch(file.data).then(response=>response.blob());
+const uploaded=await uploadFileToCloud(new File([blob],file.name,{type:file.type||blob.type}));
+file.data=uploaded.url;file.pathname=uploaded.pathname;file.size=blob.size;
+}
+
+for(const [key,name] of [['profilePic','profile-photo.jpg'],['logoPic','portfolio-logo.jpg']]){
+if(typeof data[key]==='string'&&data[key].startsWith('data:')){
+showToast(`⏳ Moving ${name} to cloud storage...`,'info');
+const blob=await fetch(data[key]).then(response=>response.blob());
+const uploaded=await uploadFileToCloud(new File([blob],name,{type:blob.type||'image/jpeg'}));
+data[key]=uploaded.url;
+}
 }
 }
 
@@ -166,32 +199,42 @@ tx.onabort=()=>{db.close();reject(tx.error)};
 
 async function savePortfolio(silent=false){
 try{
-await writePortfolioDB(data);
+if(!isAdmin){showToast('⚠️ Enter admin mode before publishing.','error');return false}
+await migrateEmbeddedFiles();
+const response=await fetch('/api/portfolio',{
+method:'PUT',
+headers:{'Content-Type':'application/json'},
+credentials:'same-origin',
+body:JSON.stringify(data),
+});
+if(response.status===401){lockAdmin(false);throw new Error('Your admin session expired. Sign in again.')}
+if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Publish failed')}
 const b=$('saveBtn');b.classList.add('saving');setTimeout(()=>b.classList.remove('saving'),600);
 if(!silent){
 const used=getStorageUsage();
-showToast(`✅ Saved in browser (${fmtSize(used)}).`,'success');
+showToast(`✅ Published live (${fmtSize(used)} of content data).`,'success');
 }
 return true;
 }catch(e){
-showToast('⚠️ Could not save. Your browser may be out of storage space or blocking IndexedDB.','error');
+console.error('Portfolio publish failed:',e);
+showToast(`⚠️ ${e.message||'Could not publish portfolio.'}`,'error');
 return false;
 }
 }
 
 async function loadData(){
 try{
-// Personal edits saved in this browser always win.
+// Shared cloud content is the source of truth for every visitor.
+const response=await fetch('/api/portfolio',{cache:'no-store'});
+if(response.ok){const shared=await response.json();data={...data,...shared};return}
+
+// Fall back to legacy browser data so the owner can publish it after signing in.
 const saved=await readPortfolioDB();
 if(saved){data={...data,...saved};return}
-
-// Migrate data from older versions that used the ~5 MB localStorage quota.
 const legacy=localStorage.getItem(STORE);
 if(legacy){
 const parsed=JSON.parse(legacy);
 data={...data,...parsed};
-await writePortfolioDB(data);
-localStorage.removeItem(STORE);
 return;
 }
 
@@ -199,57 +242,7 @@ return;
 if(window.__PORTFOLIO_DATA__){data={...data,...window.__PORTFOLIO_DATA__}}
 }catch(e){
 if(window.__PORTFOLIO_DATA__)data={...data,...window.__PORTFOLIO_DATA__};
-console.warn('Portfolio storage is unavailable:',e);
-}
-}
-
-// ════════ GENERATE PRODUCTION HTML (one-click deploy file) ════════
-// Builds a standalone index.html with the current portfolio data baked in,
-// then downloads it. Replace the repository index.html and redeploy to Vercel.
-async function generateProductionHTML(){
-if(!isAdmin)return showToast('⚠️ Enter admin mode first.','info');
-showToast('⏳ Building your production index.html…','info');
-try{
-// Save latest edits so they are included.
-await savePortfolio(true);
-
-// Get a clean copy of this page's source.
-let source='';
-try{
-const res=await fetch(window.location.href,{cache:'no-store'});
-if(res.ok)source=await res.text();
-}catch(e){/* fetch can fail on file:// — fall back below */}
-if(!source||source.indexOf('__PORTFOLIO_DATA__')===-1&&source.indexOf('<body')===-1){
-source='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
-}
-
-// Remove any previously baked-in data block so re-generating stays clean.
-source=source.replace(/<script id="portfolio-data">[\s\S]*?<\/script>\s*/i,'');
-
-// Serialize current data (escape closing tags so it can't break the script).
-const json=JSON.stringify(data).replace(/<\//g,'<\\/');
-const dataScript='<script id="portfolio-data">window.__PORTFOLIO_DATA__='+json+';<\/script>\n';
-
-// Inject right after the opening <body> tag.
-if(/<body[^>]*>/i.test(source)){
-source=source.replace(/(<body[^>]*>)/i,'$1\n'+dataScript);
-}else{
-source=dataScript+source;
-}
-
-// Strip the admin-mode class if it leaked into the markup.
-source=source.replace(/(<body[^>]*class=")([^"]*)admin-mode\s*([^"]*)(")/i,'$1$2$3$4');
-
-// Download.
-const blob=new Blob([source],{type:'text/html'});
-const url=URL.createObjectURL(blob);
-const a=document.createElement('a');
-a.href=url;a.download='index.html';
-document.body.appendChild(a);a.click();a.remove();
-URL.revokeObjectURL(url);
-showToast('✅ index.html downloaded! Replace the project file and redeploy to Vercel.','success');
-}catch(e){
-showToast('⚠️ Could not generate production file. Try again.','error');
+console.warn('Shared portfolio storage is unavailable:',e);
 }
 }
 
@@ -266,8 +259,17 @@ function showTab(key,btn){document.querySelectorAll('.tab-pane').forEach(p=>p.cl
 
 function toggleAdmin(){if(isAdmin){lockAdmin();return}$('pwdOverlay').classList.add('open');setTimeout(()=>$('pwdInput').focus(),200)}
 function closePwdModal(){$('pwdOverlay').classList.remove('open');$('pwdInput').value='';$('pwdError').textContent='';$('pwdInput').classList.remove('wrong')}
-function checkPassword(){const i=$('pwdInput');if(i.value===ADMIN_PASSWORD){isAdmin=true;closePwdModal();document.body.classList.add('admin-mode');$('adminBar').classList.add('show');$('adminToggle').classList.add('active');$('adminToggle').textContent='🔓';$('addDegBtn').style.display='inline-flex';$('addCertBtn').style.display='inline-flex';renderAll();showToast('🔓 Admin mode activated!','success')}else{i.classList.add('wrong');$('pwdError').textContent='❌ Incorrect password.';i.value='';setTimeout(()=>{i.classList.remove('wrong');i.focus()},500)}}
-function lockAdmin(){isAdmin=false;document.body.classList.remove('admin-mode');$('adminBar').classList.remove('show');$('adminToggle').classList.remove('active');$('adminToggle').textContent='🔒';$('addDegBtn').style.display='none';$('addCertBtn').style.display='none';renderAll();showToast('🔒 Admin mode locked.','info')}
+function activateAdmin(showMessage=true){isAdmin=true;closePwdModal();document.body.classList.add('admin-mode');$('adminBar').classList.add('show');$('adminToggle').classList.add('active');$('adminToggle').textContent='🔓';$('addDegBtn').style.display='inline-flex';$('addCertBtn').style.display='inline-flex';renderAll();if(showMessage)showToast('🔓 Admin mode activated!','success')}
+async function checkPassword(){
+const i=$('pwdInput'),password=i.value;
+$('pwdError').textContent='Checking…';
+try{
+const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({password})});
+if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Incorrect password')}
+activateAdmin(true);
+}catch(e){i.classList.add('wrong');$('pwdError').textContent=`❌ ${e.message||'Could not sign in.'}`;i.value='';setTimeout(()=>{i.classList.remove('wrong');i.focus()},500)}
+}
+async function lockAdmin(notifyServer=true){isAdmin=false;document.body.classList.remove('admin-mode');$('adminBar').classList.remove('show');$('adminToggle').classList.remove('active');$('adminToggle').textContent='🔒';$('addDegBtn').style.display='none';$('addCertBtn').style.display='none';renderAll();if(notifyServer)fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).catch(()=>{});showToast('🔒 Admin mode locked.','info')}
 function togglePwdVis(){const i=$('pwdInput'),e=$('pwdEye');if(i.type==='password'){i.type='text';e.textContent='🙈'}else{i.type='password';e.textContent='👁️'}}
 $('pwdOverlay').addEventListener('click',e=>{if(e.target===$('pwdOverlay'))closePwdModal()});
 
@@ -300,10 +302,10 @@ $('editOverlay').addEventListener('click',e=>{if(e.target===$('editOverlay'))clo
 
 $('hiddenMultiFileInput').addEventListener('change',async function(){
 const files=Array.from(this.files);
-showToast(`⏳ Processing ${files.length} file(s)...`,'info');
+showToast(`⏳ Uploading ${files.length} file(s) to cloud storage...`,'info');
 for(const f of files){const res=await processFile(f);if(res){pendingFiles.push(res);renderModalFilePreviews()}}
 this.value='';
-showToast('✅ Files ready','success');
+showToast('✅ Files uploaded. Save the item to publish them.','success');
 });
 
 function renderModalFilePreviews(){
@@ -358,11 +360,11 @@ else if(type==='proj'){for(const k of Object.keys(data.projects)){const o=data.p
 else if(type==='deg')target=data.education.degrees.find(x=>x.id===id);
 else if(type==='cert')target=data.education.certs.find(x=>x.id===id);
 else if(type==='gal')target=data.gallery.find(x=>x.id===id);
-if(target&&target.files){target.files.splice(idx,1);renderAll();savePortfolio(true);showToast('🗑️ File removed','info')}
+if(target&&target.files){const [removed]=target.files.splice(idx,1);renderAll();savePortfolio(true);if(removed?.data?.includes('.blob.vercel-storage.com/'))fetch('/api/files',{method:'DELETE',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({url:removed.data})}).catch(()=>{});showToast('🗑️ File removed','info')}
 }
 
-function adminUploadProfile(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Compressing...','info');const result=await compressImage(f);data.profilePic=result.data;renderProfile();savePortfolio(true);showToast('✅ Profile updated!','success');this.value=''};i.click()}
-function adminUploadLogo(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Compressing...','info');const result=await compressImage(f);data.logoPic=result.data;renderLogo();savePortfolio(true);showToast('✅ Logo updated!','success');this.value=''};i.click()}
+function adminUploadProfile(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Uploading profile photo...','info');const result=await processFile(f);if(result){data.profilePic=result.data;renderProfile();await savePortfolio(true);showToast('✅ Profile updated live!','success')}this.value=''};i.click()}
+function adminUploadLogo(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Uploading logo...','info');const result=await processFile(f);if(result){data.logoPic=result.data;renderLogo();await savePortfolio(true);showToast('✅ Logo updated live!','success')}this.value=''};i.click()}
 function renderProfile(){if(data.profilePic){$('profileImg').src=data.profilePic;$('profileImg').style.display='block';$('profileInitial').style.display='none'}else{$('profileImg').style.display='none';$('profileInitial').style.display='block'}}
 function renderLogo(){if(data.logoPic){$('logoImg').src=data.logoPic;$('logoImg').style.display='block';$('logoText').style.display='none'}else{$('logoImg').style.display='none';$('logoText').style.display='block'}}
 
@@ -615,6 +617,10 @@ function renderAll(){renderProfile();renderLogo();renderHero();renderAbout();ren
 async function bootstrap(){
 await loadData();
 renderAll();
+try{
+const session=await fetch('/api/auth/session',{cache:'no-store',credentials:'same-origin'});
+if(session.ok&&(await session.json()).authenticated)activateAdmin(false);
+}catch{}
 setTimeout(typeLoop,800);
 }
 
