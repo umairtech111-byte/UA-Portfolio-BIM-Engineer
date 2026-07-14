@@ -8,7 +8,7 @@ Static Vercel portfolio backed by Supabase Auth, Postgres, and Storage.
 - Admin account: `engr.umair.ahmad111@gmail.com`
 - Content table: `public.portfolio_content`
 - File bucket: `portfolio-files`
-- Maximum file size: 100 MB
+- Maximum file size: 50 MB
 - Uploads larger than 6 MB use the resumable TUS protocol.
 
 The Supabase URL and publishable browser key are bundled into the frontend.

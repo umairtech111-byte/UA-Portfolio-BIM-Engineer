@@ -3,7 +3,7 @@ const DB_NAME='umair_portfolio',DB_STORE='portfolio',DB_VERSION=1;
 const ADMIN_EMAIL='engr.umair.ahmad111@gmail.com';
 const MAX_IMG_DIM=1200;          // resize images larger than this
 const IMG_QUALITY=0.78;          // JPEG quality for compression
-const MAX_FILE_SIZE=100*1024*1024;
+const MAX_FILE_SIZE=50*1024*1024;
 
 let isAdmin=false,editContext=null,pendingFiles=[];
 
