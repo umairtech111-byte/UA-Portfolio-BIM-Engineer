@@ -1,26 +1,33 @@
 # Umair Ahmad — BIM Engineer Portfolio
 
-Portfolio website with secure admin sessions, shared live content, and direct
-file uploads to Vercel Blob.
+Static Vercel portfolio backed by Supabase Auth, Postgres, and Storage.
 
-## One-time Vercel setup
+## Backend
 
-1. Import this GitHub repository into Vercel.
-2. In the project, open **Storage**, create a **Blob** store, choose **Public**
-   access, and connect it to Production and Preview. Vercel creates
-   `BLOB_READ_WRITE_TOKEN` automatically.
-3. In **Settings → Environment Variables**, add:
+- Supabase project: `taijzaftsddchzpzialc`
+- Admin account: `engr.umair.ahmad111@gmail.com`
+- Content table: `public.portfolio_content`
+- File bucket: `portfolio-files`
+- Maximum file size: 100 MB
+- Uploads larger than 6 MB use the resumable TUS protocol.
 
-   - `ADMIN_PASSWORD`: the private password used to open admin mode.
-   - `SESSION_SECRET`: a long random value. Generate one with
-     `openssl rand -base64 48`.
+The Supabase URL and publishable browser key are bundled into the frontend.
+This is expected for Supabase clients. Database and Storage access is secured
+with Row Level Security; no secret or service-role key is included.
 
-4. Redeploy the project after adding the variables.
-5. Open the deployed website, use the lock button, sign in, and click
-   **Publish Live** once to create the initial shared portfolio data.
+## Database setup
 
-Never add real environment variable values to Git. `.env.example` contains
-only placeholders.
+The complete schema, bucket, grants, and RLS policies are in:
+
+```text
+supabase/migrations/20260714153000_create_portfolio_backend.sql
+```
+
+Apply it with the Supabase CLI or paste it into the Supabase Dashboard SQL
+Editor and select **Run**.
+
+Create the admin user in **Authentication → Users** with the email listed
+above. Disable public email signups after the account exists.
 
 ## Local development
 
@@ -29,31 +36,22 @@ npm install
 npm run dev
 ```
 
-The first `npm run dev` opens the Vercel CLI setup. Link the existing project
-and run `vercel env pull .env.local` to obtain its development environment
-variables. The CLI prints the local URL, normally `http://localhost:3000`.
+Open `http://localhost:4173`.
 
 ## Production build
 
 ```bash
 npm run build
-npm run preview
 ```
 
-The build script writes the deployable website to `dist/`. Vercel uses the settings in
-`vercel.json` automatically.
+The dependency-free static output is written to `dist/`. Vercel uses the
+settings in `vercel.json`.
 
-## Portfolio editing and files
+## Publishing
 
-The server verifies the admin password and creates an eight-hour, HTTP-only
-signed session cookie. The password and session secret are never shipped in
-the public JavaScript bundle.
+Click the lock button, sign in with the Supabase admin password, edit the
+portfolio, and select **Publish Live**. Visitors read the same Postgres row and
+see the update after refreshing; no Git commit or redeployment is needed.
 
-Files upload directly from the browser to Vercel Blob and may be up to 100 MB.
-Portfolio metadata is stored as a versioned JSON blob. Clicking **Publish
-Live**, or saving an edited item, updates that shared JSON. Every visitor then
-loads the same latest version without a Git commit or Vercel redeployment.
-
-Legacy IndexedDB/localStorage data is used only as a fallback when no shared
-portfolio has been published yet, allowing old browser-only edits to be
-published after the first secure sign-in.
+Legacy browser/base64 and Vercel Blob attachments are moved into Supabase
+Storage the first time the administrator publishes them.

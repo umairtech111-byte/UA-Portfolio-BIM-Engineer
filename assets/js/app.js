@@ -1,5 +1,6 @@
 const STORE='umair_portfolio_v6';
 const DB_NAME='umair_portfolio',DB_STORE='portfolio',DB_VERSION=1;
+const ADMIN_EMAIL='engr.umair.ahmad111@gmail.com';
 const MAX_IMG_DIM=1200;          // resize images larger than this
 const IMG_QUALITY=0.78;          // JPEG quality for compression
 const MAX_FILE_SIZE=100*1024*1024;
@@ -122,13 +123,10 @@ return null;
 }
 
 async function uploadFileToCloud(file){
-if(typeof window.vercelBlobUpload!=='function')throw new Error('Cloud upload client is unavailable');
+if(typeof window.supabaseUploadFile!=='function')throw new Error('Supabase upload client is unavailable');
 const safeName=(file.name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-');
-return window.vercelBlobUpload(`portfolio/uploads/${Date.now()}-${safeName}`,file,{
-access:'public',
-handleUploadUrl:'/api/upload',
-multipart:file.size>50*1024*1024,
-});
+const pathname=`uploads/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safeName}`;
+return window.supabaseUploadFile(pathname,file,percentage=>showToast(`⏳ Uploading ${file.name}: ${percentage}%`,'info'));
 }
 
 async function migrateEmbeddedFiles(){
@@ -136,7 +134,7 @@ const embedded=[];
 const visit=value=>{
 if(Array.isArray(value)){value.forEach(visit);return}
 if(!value||typeof value!=='object')return;
-if(typeof value.data==='string'&&value.data.startsWith('data:')&&value.name){embedded.push(value);return}
+if(typeof value.data==='string'&&(value.data.startsWith('data:')||value.data.includes('.blob.vercel-storage.com/'))&&value.name){embedded.push(value);return}
 Object.values(value).forEach(visit);
 };
 visit(data);
@@ -149,7 +147,7 @@ file.data=uploaded.url;file.pathname=uploaded.pathname;file.size=blob.size;
 }
 
 for(const [key,name] of [['profilePic','profile-photo.jpg'],['logoPic','portfolio-logo.jpg']]){
-if(typeof data[key]==='string'&&data[key].startsWith('data:')){
+if(typeof data[key]==='string'&&(data[key].startsWith('data:')||data[key].includes('.blob.vercel-storage.com/'))){
 showToast(`⏳ Moving ${name} to cloud storage...`,'info');
 const blob=await fetch(data[key]).then(response=>response.blob());
 const uploaded=await uploadFileToCloud(new File([blob],name,{type:blob.type||'image/jpeg'}));
@@ -201,14 +199,11 @@ async function savePortfolio(silent=false){
 try{
 if(!isAdmin){showToast('⚠️ Enter admin mode before publishing.','error');return false}
 await migrateEmbeddedFiles();
-const response=await fetch('/api/portfolio',{
-method:'PUT',
-headers:{'Content-Type':'application/json'},
-credentials:'same-origin',
-body:JSON.stringify(data),
-});
-if(response.status===401){lockAdmin(false);throw new Error('Your admin session expired. Sign in again.')}
-if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Publish failed')}
+if(!window.supabaseClient)throw new Error('Supabase client is unavailable');
+const {data:sessionData}=await window.supabaseClient.auth.getSession();
+if(!sessionData.session){lockAdmin(false);throw new Error('Your admin session expired. Sign in again.')}
+const {error}=await window.supabaseClient.from('portfolio_content').upsert({id:'main',data,updated_by:sessionData.session.user.id},{onConflict:'id'});
+if(error)throw error;
 const b=$('saveBtn');b.classList.add('saving');setTimeout(()=>b.classList.remove('saving'),600);
 if(!silent){
 const used=getStorageUsage();
@@ -225,8 +220,11 @@ return false;
 async function loadData(){
 try{
 // Shared cloud content is the source of truth for every visitor.
-const response=await fetch('/api/portfolio',{cache:'no-store'});
-if(response.ok){const shared=await response.json();data={...data,...shared};return}
+if(window.supabaseClient){
+const {data:shared,error}=await window.supabaseClient.from('portfolio_content').select('data').eq('id','main').maybeSingle();
+if(!error&&shared?.data){data={...data,...shared.data};return}
+if(error)console.warn('Could not load shared portfolio:',error.message);
+}
 
 // Fall back to legacy browser data so the owner can publish it after signing in.
 const saved=await readPortfolioDB();
@@ -264,12 +262,13 @@ async function checkPassword(){
 const i=$('pwdInput'),password=i.value;
 $('pwdError').textContent='Checking…';
 try{
-const response=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({password})});
-if(!response.ok){const result=await response.json().catch(()=>({}));throw new Error(result.error||'Incorrect password')}
+if(!window.supabaseClient)throw new Error('Supabase authentication is unavailable');
+const {error}=await window.supabaseClient.auth.signInWithPassword({email:ADMIN_EMAIL,password});
+if(error)throw new Error(error.message==='Invalid login credentials'?'Incorrect password':error.message);
 activateAdmin(true);
 }catch(e){i.classList.add('wrong');$('pwdError').textContent=`❌ ${e.message||'Could not sign in.'}`;i.value='';setTimeout(()=>{i.classList.remove('wrong');i.focus()},500)}
 }
-async function lockAdmin(notifyServer=true){isAdmin=false;document.body.classList.remove('admin-mode');$('adminBar').classList.remove('show');$('adminToggle').classList.remove('active');$('adminToggle').textContent='🔒';$('addDegBtn').style.display='none';$('addCertBtn').style.display='none';renderAll();if(notifyServer)fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}).catch(()=>{});showToast('🔒 Admin mode locked.','info')}
+async function lockAdmin(notifyServer=true){isAdmin=false;document.body.classList.remove('admin-mode');$('adminBar').classList.remove('show');$('adminToggle').classList.remove('active');$('adminToggle').textContent='🔒';$('addDegBtn').style.display='none';$('addCertBtn').style.display='none';renderAll();if(notifyServer&&window.supabaseClient)window.supabaseClient.auth.signOut().catch(()=>{});showToast('🔒 Admin mode locked.','info')}
 function togglePwdVis(){const i=$('pwdInput'),e=$('pwdEye');if(i.type==='password'){i.type='text';e.textContent='🙈'}else{i.type='password';e.textContent='👁️'}}
 $('pwdOverlay').addEventListener('click',e=>{if(e.target===$('pwdOverlay'))closePwdModal()});
 
@@ -360,7 +359,7 @@ else if(type==='proj'){for(const k of Object.keys(data.projects)){const o=data.p
 else if(type==='deg')target=data.education.degrees.find(x=>x.id===id);
 else if(type==='cert')target=data.education.certs.find(x=>x.id===id);
 else if(type==='gal')target=data.gallery.find(x=>x.id===id);
-if(target&&target.files){const [removed]=target.files.splice(idx,1);renderAll();savePortfolio(true);if(removed?.data?.includes('.blob.vercel-storage.com/'))fetch('/api/files',{method:'DELETE',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({url:removed.data})}).catch(()=>{});showToast('🗑️ File removed','info')}
+if(target&&target.files){const [removed]=target.files.splice(idx,1);renderAll();savePortfolio(true);if(removed?.pathname&&window.supabaseClient)window.supabaseClient.storage.from(window.supabaseStorageBucket||'portfolio-files').remove([removed.pathname]).catch(()=>{});showToast('🗑️ File removed','info')}
 }
 
 function adminUploadProfile(){if(!isAdmin)return showToast('⚠️ Enter admin mode.','info');const i=$('hiddenFileInput');i.onchange=async function(){const f=this.files[0];if(!f)return;showToast('⏳ Uploading profile photo...','info');const result=await processFile(f);if(result){data.profilePic=result.data;renderProfile();await savePortfolio(true);showToast('✅ Profile updated live!','success')}this.value=''};i.click()}
@@ -618,8 +617,7 @@ async function bootstrap(){
 await loadData();
 renderAll();
 try{
-const session=await fetch('/api/auth/session',{cache:'no-store',credentials:'same-origin'});
-if(session.ok&&(await session.json()).authenticated)activateAdmin(false);
+if(window.supabaseClient){const {data:sessionData}=await window.supabaseClient.auth.getSession();if(sessionData.session?.user?.email===ADMIN_EMAIL)activateAdmin(false)}
 }catch{}
 setTimeout(typeLoop,800);
 }

@@ -11,8 +11,8 @@ await mkdir(output, { recursive: true });
 await cp(resolve(root, 'assets'), resolve(output, 'assets'), { recursive: true });
 
 await build({
-  entryPoints: [resolve(root, 'src/blob-client.js')],
-  outfile: resolve(output, 'assets/js/blob-client.js'),
+  entryPoints: [resolve(root, 'src/supabase-client.js')],
+  outfile: resolve(output, 'assets/js/supabase-client.js'),
   bundle: true,
   format: 'iife',
   platform: 'browser',

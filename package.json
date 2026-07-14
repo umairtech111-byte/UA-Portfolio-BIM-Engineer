@@ -5,12 +5,13 @@
   "type": "module",
   "description": "Umair Ahmad's BIM engineering portfolio",
   "scripts": {
-    "dev": "npx vercel dev",
+    "dev": "npm run build && npm run preview",
     "build": "node scripts/build.mjs",
     "preview": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist"
   },
   "dependencies": {
-    "@vercel/blob": "^2.0.0"
+    "@supabase/supabase-js": "^2.52.0",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "esbuild": "^0.25.0"
